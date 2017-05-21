@@ -1,0 +1,518 @@
+---
+title: "Web Mining"
+output: 
+  flexdashboard::flex_dashboard:
+    vertical_layout: scroll
+---
+```{r}
+
+library("rvest")
+library("ggmap")
+library("leaflet")
+library("flexdashboard")
+library("ggplot2")
+library("plotrix")
+library("gridExtra")
+```
+All Football Matches
+===================================== 
+***
+About The Data
+
+All data about matches taken from http://www.sportsevents365.com   
+
+### All Matches
+
+```{r}
+League <- c("uefa-europa-league","la-liga","serie-a","premier-league","bundesliga","french-ligue-1","2018-world-cup","2017-confederations-cup")
+Tickets <- data.frame()
+for(x in League){
+  url <- paste("http://www.sportsevents365.com/dock/competition/", 
+             x, sep="")
+  webpage <- read_html(url)
+  Tickets_Names = webpage%>% html_nodes(css=".colorA span") %>% html_text()
+  Tickets_Names <- gsub("\n","",Tickets_Names)
+  Tickets_Names <- gsub("\t","",Tickets_Names)
+  Tickets_Names <- gsub(" ","",Tickets_Names)
+  Tickets_Names = as.data.frame(Tickets_Names)
+  Location = webpage%>% html_nodes(css=".eventLocation div") %>% html_text()
+  Location <- gsub("\n","",Location)
+  Location <- gsub("\t","",Location)
+  Location <- gsub(" ","",Location)
+  Location_Coordinates <- geocode(Location)
+  Location = as.data.frame(Location)
+  Match_Time = webpage%>% html_nodes(css=".icon+ span") %>% html_text()
+  Match_Time <- gsub(",","",Match_Time)
+  Match_Time = as.data.frame(Match_Time)
+  Tickets_Price = webpage%>% html_nodes(css=".stories .tableCell:nth-child(3)") %>% html_text()
+  Tickets_Price <- gsub("from","",Tickets_Price)
+  Tickets_Price <- gsub("€","",Tickets_Price)
+  Tickets_Price <- gsub("\n","",Tickets_Price)
+  Tickets_Price <- gsub("\t","",Tickets_Price)
+  Tickets_Price <- as.numeric(Tickets_Price)
+  Tickets_Price <- as.data.frame(Tickets_Price)
+  All = cbind(Tickets_Names ,Location ,Location_Coordinates,
+                              Match_Time ,Tickets_Price,League=x )
+  All = as.data.frame(All)
+  Tickets <- rbind(Tickets, All)
+}
+Tickets$Tickets_Price[is.na(Tickets$Tickets_Price)] <- 0
+#t <- leaflet() %>%
+#  addTiles() %>%  # Add default OpenStreetMap map tiles
+#  addMarkers(lng=Tickets$lon, lat=Tickets$lat, popup=(Tickets_N))
+#t 
+Tickets_N <- paste(Tickets$Tickets_Names,"--",Tickets$Match_Time,"--","€",Tickets$Tickets_Price)
+
+df.20 <- Tickets[1:nrow(Tickets),]
+
+getColor <- function(Tickets) {
+  sapply(Tickets$League, function(League) {
+    if(League == "uefa-europa-league") {
+      "green"
+    } else if(League =="la-liga") {
+      "purple"
+    }else if(League =="serie-a") {
+      "white"
+    } else if(League =="premier-league") {
+      "pink"
+    }else if(League =="bundesliga") {
+      "red"
+    }else if(League =="french-ligue-1") {
+      "darkblue"
+    }else if(League =="2018-world-cup") {
+      "orange"
+    }else if(League =="2017-confederations-cup") {
+      "lightblue"
+    }else {
+      "black"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-football',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(df.20)
+)
+
+colour <- c("lightblue","orange","red","darkblue","purple","pink","white","green")
+pal <- colorFactor(colour,League)
+
+leaflet(df.20) %>% addTiles() %>%
+  addAwesomeMarkers(~lon, ~lat, icon=icons, label=~as.character(Tickets_N))%>%
+  addLegend("bottomright", pal = pal, values = ~League,
+            title = "Leagues",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1
+  )
+```
+
+   
+Football Matches according to Teams
+=====================================  
+
+
+```{r}
+#"barcelona-fc","real-madrid","atletico-de-madrid","juventus-fc","as-roma","ac-milan","arsenal-fc",
+#"chelsea-fc","liverpool-fc","manchester-united","bayern-munich","paris-saint-germain"
+
+Ticketteam <- function(Team_Name){
+  url <- paste("http://www.sportsevents365.com/dock/team/", 
+               Team_Name, sep="")
+  webpage <- read_html(url)
+  Team <- data.frame()
+  Tickets_Names = webpage%>% html_nodes(css=".colorA span") %>% html_text()
+  Tickets_Names <- gsub("\n","",Tickets_Names)
+  Tickets_Names <- gsub("\t","",Tickets_Names)
+  Tickets_Names <- gsub(" ","",Tickets_Names)
+  Tickets_Names = as.data.frame(Tickets_Names)
+  Location = webpage%>% html_nodes(css=".eventLocation div") %>% html_text()
+  Location <- gsub("\n","",Location)
+  Location <- gsub("\t","",Location)
+  Location <- gsub(" ","",Location)
+  Location_Coordinates <- geocode(Location)
+  Location = as.data.frame(Location)
+  Match_Time = webpage%>% html_nodes(css=".icon+ span") %>% html_text()
+  Match_Time <- gsub(",","",Match_Time)
+  #Match_Time <- as.Date(Match_Time, format = "%d %b %Y")
+  Match_Time = as.data.frame(Match_Time)
+  Tickets_Price = webpage%>% html_nodes(css=".stories .tableCell:nth-child(3)") %>% html_text()
+  Tickets_Price <- gsub("from","",Tickets_Price)
+  Tickets_Price <- gsub("€","",Tickets_Price)
+  Tickets_Price <- gsub("\n","",Tickets_Price)
+  Tickets_Price <- gsub("\t","",Tickets_Price)
+  Tickets_Price <- as.numeric(Tickets_Price)
+  Tickets_Price <- as.data.frame(Tickets_Price)
+  All = cbind(Tickets_Names ,Location ,Location_Coordinates,
+              Match_Time ,Tickets_Price )
+  All = as.data.frame(All)
+  Team <- rbind(Team, All)
+  Team_N <- paste(Team$Tickets_Names,"--",Team$Match_Time,"--","€",Team$Tickets_Price)
+  m <- leaflet() %>%
+    addTiles() %>%  # Add default OpenStreetMap map tiles
+    addMarkers(lng=Team$lon, lat=Team$lat, popup=(Team_N))
+  m
+}
+```
+
+
+```{r}
+Text_Team <- function(Team_Name){
+  url <- paste("http://www.sportsevents365.com/dock/team/", 
+               Team_Name, sep="")
+  webpage <- read_html(url)
+  Text = webpage%>% html_nodes(css="p:nth-child(1)") %>% html_text()
+  print(Text[1])
+  }
+```
+
+
+
+### Barcelona Fc
+
+```{r}
+Text_Team("barcelona-fc")
+```
+
+    
+```{r}
+Ticketteam("barcelona-fc")
+```
+    
+### Real Madrid
+
+```{r}
+Text_Team("real-madrid")
+```
+
+
+```{r}
+Ticketteam("real-madrid")
+```
+
+### Atletico de Madrid
+
+```{r}
+Text_Team("atletico-de-madrid")
+```
+
+
+```{r}
+Ticketteam("atletico-de-madrid")
+```
+
+### Juventus FC
+
+```{r}
+Text_Team("juventus-fc")
+```
+
+
+```{r}
+Ticketteam("juventus-fc")
+```
+
+### As Roma
+
+```{r}
+Text_Team("as-roma")
+```
+
+
+```{r}
+Ticketteam("as-roma")
+```
+
+### Ac Milan
+
+```{r}
+Text_Team("ac-milan")
+```
+
+
+```{r}
+Ticketteam("ac-milan")
+```
+
+### Arsenal FC
+
+```{r}
+Text_Team("arsenal-fc")
+```
+
+
+```{r}
+Ticketteam("arsenal-fc")
+```
+
+### Chelsea FC
+
+```{r}
+Text_Team("chelsea-fc")
+```
+
+
+```{r}
+Ticketteam("chelsea-fc")
+```
+
+### Liverpool FC
+
+```{r}
+Text_Team("liverpool-fc")
+```
+
+
+```{r}
+Ticketteam("liverpool-fc")
+```
+
+### Manchester United
+
+```{r}
+Text_Team("manchester-united")
+```
+
+
+```{r}
+Ticketteam("manchester-united")
+```
+
+### Bayern Munich
+
+```{r}
+Text_Team("bayern-munich")
+```
+
+
+```{r}
+Ticketteam("bayern-munich")
+```
+
+### Paris Saint Germain
+
+```{r}
+Text_Team("paris-saint-germain")
+```
+
+
+```{r}
+Ticketteam("paris-saint-germain")
+```
+
+Football Matches according to Competition
+=====================================     
+
+```{r}
+Ticketleague <- function(League_Name){
+  url <- paste("http://www.sportsevents365.com/dock/competition/", 
+               League_Name, sep="")
+  webpage <- read_html(url)
+  Ticketss <- data.frame()
+  Tickets_Names = webpage%>% html_nodes(css=".colorA span") %>% html_text()
+  Tickets_Names <- gsub("\n","",Tickets_Names)
+  Tickets_Names <- gsub("\t","",Tickets_Names)
+  Tickets_Names <- gsub(" ","",Tickets_Names)
+  Tickets_Names = as.data.frame(Tickets_Names)
+  Location = webpage%>% html_nodes(css=".eventLocation div") %>% html_text()
+  Location <- gsub("\n","",Location)
+  Location <- gsub("\t","",Location)
+  Location <- gsub(" ","",Location)
+  Location_Coordinates <- geocode(Location)
+  Location = as.data.frame(Location)
+  Match_Time = webpage%>% html_nodes(css=".icon+ span") %>% html_text()
+  Match_Time <- gsub(",","",Match_Time)
+  #Match_Time <- as.Date(Match_Time, format = "%d %b %Y")
+  Match_Time = as.data.frame(Match_Time)
+  Tickets_Price = webpage%>% html_nodes(css=".stories .tableCell:nth-child(3)") %>% html_text()
+  Tickets_Price <- gsub("from","",Tickets_Price)
+  Tickets_Price <- gsub("€","",Tickets_Price)
+  Tickets_Price <- gsub("\n","",Tickets_Price)
+  Tickets_Price <- gsub("\t","",Tickets_Price)
+  Tickets_Price <- as.numeric(Tickets_Price)
+  Tickets_Price <- as.data.frame(Tickets_Price)
+  All = cbind(Tickets_Names ,Location ,Location_Coordinates,
+              Match_Time ,Tickets_Price )
+  All = as.data.frame(All)
+  Ticketss <- rbind(Ticketss, All)
+  Ticketss_N <- paste(Ticketss$Tickets_Names,"--",Ticketss$Match_Time,"--","€",Ticketss$Tickets_Price)
+  n <- leaflet() %>%addTiles() %>%addMarkers(lng=Ticketss$lon, lat=Ticketss$lat, popup=(Ticketss_N),popupOptions(color="black"))
+  return(n)
+}
+```
+
+```{r}
+Text_League <- function(League_Name){
+  url <- paste("http://www.sportsevents365.com/dock/competition/", 
+               League_Name, sep="")
+  webpage <- read_html(url)
+  Text = webpage%>% html_nodes(css="p:nth-child(1)") %>% html_text()
+  print(Text[1])
+  }
+```
+
+
+### La Liga
+
+```{r}
+Text_League("la-liga")
+```
+
+    
+```{r}
+Ticketleague("la-liga")
+```
+    
+### Uefa Europa League
+
+```{r}
+Text_League("uefa-europa-league")
+```
+
+
+```{r}
+Ticketleague("uefa-europa-league")
+```
+
+### Serie A
+
+```{r}
+Text_League("serie-a")
+```
+
+
+```{r}
+Ticketleague("serie-a")
+```
+
+### Premier League
+
+```{r}
+Text_League("premier-league")
+```
+
+
+```{r}
+Ticketleague("premier-league")
+```
+
+### Bundesliga
+
+```{r}
+Text_League("bundesliga")
+```
+
+
+```{r}
+Ticketleague("bundesliga")
+```
+
+### French Ligue 1 
+
+```{r}
+Text_League("french-ligue-1")
+```
+
+
+```{r}
+Ticketleague("french-ligue-1")
+```
+
+### 2018 World Cup
+
+```{r}
+Text_League("2018-world-cup")
+```
+
+
+```{r}
+Ticketleague("2018-world-cup")
+```
+
+### 2017 Confederations Cup
+
+```{r}
+Text_League("2017-confederations-cup")
+```
+
+
+```{r}
+Ticketleague("2017-confederations-cup")
+```
+
+
+Top 25 Most Expensive Players
+===================================== 
+
+```{r}
+url <- paste("https://www.transfermarkt.co.uk/spieler-statistik/wertvollstespieler/marktwertetop?land_id=0&ausrichtung=alle&spielerposition_id=alle&altersklasse=alle&plus=1")
+webpage <- read_html(url)
+Player_Names = webpage%>% html_nodes(css=".spielprofil_tooltip") %>% html_text()
+Player_Names = as.data.frame(Player_Names)
+Games_Played = webpage%>% html_nodes(css=".hauptlink+ .zentriert") %>% html_text()
+Games_Played = as.data.frame(Games_Played)
+Position = webpage%>% html_nodes(css=".inline-table tr+ tr td") %>% html_text()
+Position = as.data.frame(Position)
+Age = webpage%>% html_nodes(css=".zentriert:nth-child(3)") %>% html_text()
+Age <- Age[-1]
+Age <- as.numeric(Age)
+Age <- as.data.frame(Age)
+Market_Value = webpage%>% html_nodes(css="#yw1 b") %>% html_text()
+Market_Value <- gsub("£","",Market_Value)
+#Market_Value <- gsub(".","",Market_Value)
+Market_Value <- gsub("m","",Market_Value)
+Market_Value <- as.numeric(Market_Value)
+Market_Value <- as.data.frame(Market_Value)
+Goals = webpage%>% html_nodes(css=".zentriert:nth-child(8)") %>% html_text()
+Goals <- Goals[-1]
+Goals <- as.numeric(Goals)
+Goals <- as.data.frame(Goals)
+Assists = webpage%>% html_nodes(css=".zentriert:nth-child(10)") %>% html_text()
+Assists <- Assists[-1]
+Assists <- as.numeric(Assists)
+Assists <- as.data.frame(Assists)
+  
+Player_Table = cbind(Player_Names ,Position,Age,Market_Value,Games_Played,
+               Goals,Assists)
+
+```
+### Data
+
+```{r}
+qplot(1:15, 1:15, geom = "blank") + theme(line = element_blank(), text = element_blank()) +annotation_custom(grob = tableGrob(Player_Table[1:15,],theme = ttheme_default(base_size = 6)))
+```
+
+### Player Names vs Goals (Top 10)
+ 
+```{r}
+ggplot(Player_Table[1:10,],aes(Player_Names,Goals)) +
+  geom_density()+ coord_flip()
+```
+
+### Goals vs Game Played
+
+```{r}
+ggplot(Player_Table, aes(x =Goals,color=Player_Names))+ geom_point(aes(y=Games_Played),size=2)
+```
+
+### Market value vs Age
+
+```{r}
+PA <- ggplot(Player_Table, aes(x = Age, y =Market_Value ),size=2)
+PA + geom_point(aes(color = Player_Names))+theme(text = element_text())+geom_smooth(col= "black")
+
+```
+
+### Asists vs Goals Plot of The Players on The Left Wing
+
+```{r}
+ggplot(subset(Player_Table,
+              Position=="Left Wing"),aes(x=Goals,y=Assists,color=Player_Names))+geom_point()
+```
+
+### Boxplot Goals vs Assists
+
+```{r}
+boxplot(Player_Table$Goals,Player_Table$Assists, xlab="Goals                                                      Assists")
+```
+
